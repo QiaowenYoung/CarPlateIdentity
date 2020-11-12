@@ -107,7 +107,7 @@ class char_cnn_net:
                         saver.save(sess, save_model_path, global_step=step)
                         break
 
-    def test(self,x_images,model_path):
+    def test(self, x_images, test_y, model_path):
         text_list = []
         out_put = self.cnn_construct()
         predicts = tf.nn.softmax(out_put)
@@ -120,6 +120,10 @@ class char_cnn_net:
             for i in range(len(preds)):
                 pred = preds[i].astype(int)
                 text_list.append(self.dataset[pred])
+            
+            count = np.sum(text_list == test_y)
+            accuracy = float(count / len(text_list))
+            print("test accuracy: {}".format(accuracy))
             return text_list
 
     def list_all_files(self,root):
@@ -138,7 +142,7 @@ class char_cnn_net:
     def init_data(self,dir):
         X = []
         y = []
-        if not os.path.exists(data_dir):
+        if not os.path.exists(dir):
             raise ValueError('没有找到文件夹')
         files = self.list_all_files(dir)
 
@@ -163,25 +167,32 @@ class char_cnn_net:
 
     def init_testData(self,dir):
         test_X = []
+        test_y = []
         if not os.path.exists(test_dir):
             raise ValueError('没有找到文件夹')
         files = self.list_all_files(test_dir)
+
         for file in files:
             src_img = cv2.imread(file, cv2.COLOR_BGR2GRAY)
             if src_img.ndim == 3:
                 continue
             resize_img = cv2.resize(src_img, (20, 20))
             test_X.append(resize_img)
+            dir = os.path.dirname(file)
+            # 获取图片文件上一级目录名
+            dir_name = os.path.split(dir)[-1]
+            test_y.append(dir_name)
         test_X = np.array(test_X)
-        return test_X
+        test_y = np.array(test_y)
+        return test_X, test_y
 
 
 if __name__ == '__main__':
     cur_dir = sys.path[0]
     data_dir = os.path.join(cur_dir, 'carIdentityData/cnn_char_train')
     test_dir = os.path.join(cur_dir, 'carIdentityData/cnn_char_test')
-    train_model_path = os.path.join(cur_dir, './carIdentityData/model/char_recongnize/model.ckpt')
-    model_path = os.path.join(cur_dir,'./carIdentityData/model/char_recongnize/model.ckpt-660')
+    train_model_path = os.path.join(cur_dir, 'carIdentityData/model/char_recognize/model.ckpt')
+    model_path = os.path.join(cur_dir,'carIdentityData/model/char_recognize/model.ckpt-520')
 
     train_flag = 0
     net = char_cnn_net()
@@ -191,6 +202,6 @@ if __name__ == '__main__':
         net.train(data_dir,train_model_path)
     else:
         # 测试部分
-        test_X = net.init_testData(test_dir)
-        text = net.test(test_X,model_path)
-        print(text)
+        test_X, test_y = net.init_testData(test_dir)
+        text = net.test(test_X, test_y, model_path)
+        #print(text)

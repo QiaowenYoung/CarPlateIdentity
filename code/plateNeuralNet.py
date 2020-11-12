@@ -95,7 +95,8 @@ class plate_cnn_net:
                         saver.save(sess, model_save_path, global_step=step)
                         break
 
-    def test(self,x_images,model_path):
+    def test(self, x_images, test_y, model_path):
+        test_list = []
         out_put = self.cnn_construct()
         predicts = tf.nn.softmax(out_put)
         probabilitys = tf.reduce_max(predicts, reduction_indices=[1])
@@ -105,6 +106,16 @@ class plate_cnn_net:
             sess.run(tf.global_variables_initializer())
             saver.restore(sess, model_path)
             preds, probs = sess.run([predicts, probabilitys], feed_dict={self.x_place: x_images, self.keep_place: 1.0})
+            for i in range(len(preds)):
+                pred = preds[i].astype(int)
+                if pred == 1:
+                    test_list.append('has')
+                else:
+                    test_list.append('no')
+
+        count = np.sum(test_list == test_y)
+        accuracy = float(count / len(test_list))
+        print("test accuracy: {}".format(accuracy))
         return preds,probs
 
     def list_all_files(self,root):
@@ -140,6 +151,7 @@ class plate_cnn_net:
 
     def init_testData(self,dir):
         test_X = []
+        test_y = []
         if not os.path.exists(dir):
             raise ValueError('没有找到文件夹')
         files = self.list_all_files(dir)
@@ -149,27 +161,32 @@ class plate_cnn_net:
                 continue
             resize_img = cv2.resize(src_img, (136, 36))
             test_X.append(resize_img)
+            dir = os.path.dirname(file)
+            # 获取图片文件上一级目录名
+            dir_name = os.path.split(dir)[-1]
+            test_y.append(dir_name)
         test_X = np.array(test_X)
-        return test_X
+        test_y = np.array(test_y)
+        return test_X, test_y
 
 
 if __name__ == '__main__':
     cur_dir = sys.path[0]
-    data_dir = os.path.join(cur_dir, './carIdentityData/cnn_plate_train')
-    test_dir = os.path.join(cur_dir, './carIdentityData/cnn_plate_test')
-    train_model_path = os.path.join(cur_dir, './carIdentityData/model/plate_recongnize/model.ckpt')
-    model_path = os.path.join(cur_dir,'./carIdentityData/model/plate_recongnize/model.ckpt-510')
+    data_dir = os.path.join(cur_dir, 'carIdentityData/cnn_plate_train')
+    test_dir = os.path.join(cur_dir, 'carIdentityData/cnn_plate_test')
+    train_model_path = os.path.join(cur_dir, 'carIdentityData/model/plate_recognize/model.ckpt')
+    model_path = os.path.join(cur_dir,'carIdentityData/model/plate_recognize/model.ckpt-510')
 
-    train_flag = 0
+    train_flag = 1
     net = plate_cnn_net()
 
-    if train_flag == 1:
+    if train_flag == 0:
         # 训练模型
         net.train(data_dir,train_model_path)
     else:
         # 测试部分
-        test_X = net.init_testData(test_dir)
-        preds,probs = net.test(test_X,model_path)
+        test_X, test_y = net.init_testData(test_dir)
+        preds, probs = net.test(test_X, test_y, model_path)
         for i in range(len(preds)):
             pred = preds[i].astype(int)
             prob = probs[i]

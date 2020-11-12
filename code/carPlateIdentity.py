@@ -9,6 +9,11 @@ char_table = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', '
               '桂', '黑', '沪', '冀', '津', '京', '吉', '辽', '鲁', '蒙', '闽', '宁', '青', '琼', '陕', '苏', '晋',
               '皖', '湘', '新', '豫', '渝', '粤', '云', '藏', '浙']
 
+res_table = ['安QD2580', '安EH2347', '安EH2347', '安EH2347', '安EH2347', '安ET1334', '津HSK151', '安QB7788', '鲁B022SK', '鲁B59Y25',
+             '安QB7788', '安EJ7566', '安E6J732', '安AK5644', '安AK5644', '安AK5644', '安AK5644', '安E6J732', '安AT1766', '安AT1766',
+             '安EH2347', '安E6J732', '安EH2347', '安AT4984', '安QD2528', '安E6J732', '安SD3481', '安SD3481', '安QB8869', '安ET1788',
+             '安Q74435', '安B8A590']
+
 def hist_image(img):
     assert img.ndim==2
     hist = [0 for i in range(256)]
@@ -242,11 +247,11 @@ def verify_color(rotate_rect,src_image):
         return False,mask_rotateRect
 
 # 车牌定位
-def locate_carPlate(orig_img,pred_image):
+def locate_carPlate(orig_img,pred_image, dir):
     carPlate_list = []
     temp1_orig_img = orig_img.copy() #调试用
     temp2_orig_img = orig_img.copy() #调试用
-    cloneImg,contours,heriachy = cv2.findContours(pred_image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    contours, heriachy = cv2.findContours(pred_image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     for i,contour in enumerate(contours):
         cv2.drawContours(temp1_orig_img, contours, i, (0, 255, 255), 2)
         # 获取轮廓最小外接矩形，返回值rotate_rect
@@ -269,6 +274,7 @@ def locate_carPlate(orig_img,pred_image):
             carPlate_list.append(car_plate)
 
     cv2.imshow('contour', temp1_orig_img)
+    cv2.imwrite('./carIdentityData/opencv_output/{}/contour.jpg'.format(dir), temp1_orig_img)
     return carPlate_list
 
 # 左右切割
@@ -282,7 +288,7 @@ def horizontal_cut_chars(plate):
         sum = 0
         for i in range(img.shape[0]):
             sum += round(img[i,col]/255)
-        return sum;
+        return sum
 
     sum = 0
     for col in range(img_w):
@@ -318,7 +324,7 @@ def horizontal_cut_chars(plate):
             char_addr_list.append((area_left, area_right, char_width))
     return char_addr_list
 
-def get_chars(car_plate):
+def get_chars(car_plate, dir):
     img_h,img_w = car_plate.shape[:2]
     h_proj_list = [] # 水平投影长度列表
     h_temp_len,v_temp_len = 0,0
@@ -367,8 +373,8 @@ def get_chars(car_plate):
     chars_top,chars_bottom = h_proj_list[h_maxIndex][0],h_proj_list[h_maxIndex][1]
 
     plates = car_plate[chars_top:chars_bottom+1,:]
-    cv2.imwrite('./carIdentityData/opencv_output/car.jpg',car_plate)
-    cv2.imwrite('./carIdentityData/opencv_output/plate.jpg', plates)
+    cv2.imwrite('./carIdentityData/opencv_output/{}/car.jpg'.format(dir), car_plate)
+    cv2.imwrite('./carIdentityData/opencv_output/{}/plate.jpg'.format(dir), plates)
     char_addr_list = horizontal_cut_chars(plates)
 
     for i,addr in enumerate(char_addr_list):
@@ -377,10 +383,14 @@ def get_chars(car_plate):
         char_imgs.append(char_img)
     return char_imgs
 
-def extract_char(car_plate):
+def extract_char(car_plate, dir):
     gray_plate = cv2.cvtColor(car_plate,cv2.COLOR_BGR2GRAY)
     ret,binary_plate = cv2.threshold(gray_plate,0,255,cv2.THRESH_BINARY|cv2.THRESH_OTSU)
-    char_img_list = get_chars(binary_plate)
+    char_img_list = get_chars(binary_plate, dir)
+    i = 0
+    for c in char_img_list:
+        cv2.imwrite('./carIdentityData/opencv_output/{}/'.format(dir) + str(i) + '.jpg', c)
+        i = i + 1
     return char_img_list
 
 def cnn_select_carPlate(plate_list,model_path):
@@ -413,7 +423,7 @@ def cnn_select_carPlate(plate_list,model_path):
             else:
                 return True,plate_list[result_index]
 
-def cnn_recongnize_char(img_list,model_path):
+def cnn_recognize_char(img_list,model_path):
     g2 = tf.Graph()
     sess2 = tf.Session(graph=g2)
     text_list = []
@@ -440,19 +450,24 @@ def cnn_recongnize_char(img_list,model_path):
                 text_list.append(char_table[i])
             return text_list
 
+def cmp(e):
+    e = int(e.replace(".jpg", ""))
+    return e
+
 if __name__ == '__main__':
     cur_dir = sys.path[0]
     car_plate_w,car_plate_h = 136,36
     char_w,char_h = 20,20
-    plate_model_path = os.path.join(cur_dir, './carIdentityData/model/plate_recongnize/model.ckpt-510.meta')
-    char_model_path = os.path.join(cur_dir,'./carIdentityData/model/char_recongnize/model.ckpt-660.meta')
-    img = cv2.imread('./carIdentityData/images/1.jpg')
-
+    plate_model_path = os.path.join(cur_dir, 'carIdentityData/model/plate_recognize/model.ckpt-510.meta')
+    char_model_path = os.path.join(cur_dir,'carIdentityData/model/char_recognize/model.ckpt-520.meta')
+    imgs_path = os.path.join(cur_dir, 'carIdentityData/test_imgs')
+'''
+    img = cv2.imread('./carIdentityData/test_imgs/33.jpg')
     # 预处理
     pred_img = pre_process(img)
 
     # 车牌定位
-    car_plate_list = locate_carPlate(img,pred_img)
+    car_plate_list = locate_carPlate(img,pred_img,33)
 
     # CNN车牌过滤
     ret,car_plate = cnn_select_carPlate(car_plate_list,plate_model_path)
@@ -462,10 +477,93 @@ if __name__ == '__main__':
     cv2.imshow('cnn_plate',car_plate)
 
     # 字符提取
-    char_img_list = extract_char(car_plate)
+    char_img_list = extract_char(car_plate, 33)
 
     # CNN字符识别
-    text = cnn_recongnize_char(char_img_list,char_model_path)
+    text = cnn_recognize_char(char_img_list,char_model_path)
     print(text)
 
-    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    #cv2.waitKey(0)
+'''
+    for root, dirs, files in os.walk(imgs_path):
+        count = 0
+        total_count = 224
+        files.sort(key=cmp)
+        for fname in files:
+            if fname == '.DS_Store':
+                continue
+            count_1 = 0
+            total_count_1 = 7
+            name = './carIdentityData/test_imgs/' + fname
+            img = cv2.imread(name)
+            idx = int(fname.replace('.jpg', '')) - 1
+
+            # 预处理
+            pred_img = pre_process(img)
+
+            # 车牌定位
+            car_plate_list = locate_carPlate(img, pred_img, idx + 1)
+
+            # CNN车牌过滤
+            ret, car_plate = cnn_select_carPlate(car_plate_list, plate_model_path)
+            if ret == False:
+                print("{}: 未检测到车牌".format(idx + 1))
+                continue
+                #sys.exit(-1)
+
+            cv2.imshow('cnn_plate',car_plate)
+            
+            # 字符提取
+            char_img_list = extract_char(car_plate, idx + 1)
+
+            # CNN字符识别
+            text = cnn_recognize_char(char_img_list, char_model_path)
+            true_res = []
+            for c in res_table[idx]:
+                true_res.append(c)
+            #for j in range(len(text)):
+            #    if text[j] == res_table[idx][j]:
+            #        count = count + 1
+            #        count_1 = count_1 + 1
+            print("pred result of {}.jpg: ".format(idx + 1), text)
+            print("true result of {}.jpg: ".format(idx + 1), true_res)
+
+            # 计算准确度
+            #accuracy_1 = count_1 / total_count_1
+            #accuracy_num_1 = count_1 / (total_count_1 - 1) # 去除首字之后，因为“安”并不是合法的车牌省市名
+            #print("accuracy: {}".format(accuracy_1))
+            #print("accuracy without the first word: {}".format(accuracy_num_1))
+
+            cv2.destroyAllWindows()
+
+        #accuracy = count / total_count
+        #accuracy_num = count / (total_count - 32)
+        #print("total accuracy: {}".format(accuracy))
+        #print("total accuracy without the first word: {}".format(accuracy_num))
+
+
+'''
+    img = cv2.imread('./carIdentityData/test_imgs/29.jpg')
+    # 预处理
+    pred_img = pre_process(img)
+
+    # 车牌定位
+    car_plate_list = locate_carPlate(img,pred_img,29)
+
+    # CNN车牌过滤
+    ret,car_plate = cnn_select_carPlate(car_plate_list,plate_model_path)
+    if ret == False:
+        print("未检测到车牌")
+        sys.exit(-1)
+    cv2.imshow('cnn_plate',car_plate)
+
+    # 字符提取
+    char_img_list = extract_char(car_plate, 29)
+
+    # CNN字符识别
+    text = cnn_recognize_char(char_img_list,char_model_path)
+    print(text)
+
+    cv2.destroyAllWindows()
+'''
